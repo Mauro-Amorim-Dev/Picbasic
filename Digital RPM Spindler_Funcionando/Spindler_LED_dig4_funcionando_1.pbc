@@ -1,0 +1,289 @@
+    ' Pulse counter 
+    ' =============
+    '
+    ' File name : Count_Display.bas
+    ' Company : Mister E 
+    ' Programmer : Steve Monfette
+    ' Date : 27/12/2004
+    ' Device : PIC16F84A-20/P
+    '
+    '
+    ' This program display to 3 x 7 segments dislay the result of 
+    ' pulses count on PORTA.4 pin/sec.
+    '
+    '
+    ' Hardware connection :
+    ' ---------------------
+    ' 1. 3 X 7 segments display on PORTB<7:0> 
+    ' 2. 3 X PNP transistor on PORTA<3:0> to drive common anode 
+    '    of each 7 segments display
+    '
+    '
+    ' Programming mode and PIC define
+    ' -------------------------------
+    '
+    '@ device pic16F627A,HS_OSC,WDT_ON,PWRT_ON,MCLR_ON,BOD_ON,LVP_OFF,PROTECT_OFF
+    '@ Device pic16F628A,HS_OSC,WDT_ON,PWRT_ON,MCLR_ON,BOD_ON,LVP_OFF,PROTECT_OFF 
+    '@ __config _XT_OSC & _WDT_ON & _MCLRE_ON & _LVP_OFF & _CP_OFF
+	'@ __config _HS_OSC & _WDT_ON & _PWRTE_ON 
+    ' HS oscillator 
+    ' Enable watch dog timer
+    ' Enable power up timer
+    '
+    DEFINE OSC 20 ' use 20 MHZ oscillator
+
+
+    ' I/O Definition
+    ' --------------
+    '        543210
+    TRISA = %010000 ' PORTA  : <2:0> outputs to common Anode of 7 segment 
+                      '                1. PORTA.0 More significant
+                      '                2. PORTA.2 Less significant
+                      '        : PORTA.4 input for signal
+                      '
+    TRISB = 0         ' PORTB connected to 7 segments
+                      '       B0 : segment a
+                      '       B1 : segment b
+                      '       B2 : segment c
+                      '       B3 : segment d
+                      '       B4 : segment e
+                      '       B5 : segment f
+                      '       B6 : segment g
+                      '       B7 : segment decimal dot 
+                      
+
+    ' Internal EEPROM definition
+    ' --------------------------
+    '
+    'data @0,192,249,164,176,153,146,130,248,128,144 ' table to convert
+                                                    ' numbers to 7 segments
+                                                    ' pattern output when
+                                                    ' drive invert
+                                                    
+    data @0,63,6,91,79,102,109,125,7,127,111
+
+    ' Interrupt and register definition
+    ' ---------------------------------
+    '
+    OPTION_REG = %1111000   ' TMR0 clock source : RA4/T0CKI
+                            ' increment on low to high transition
+                            ' Prescaler assign to WDT
+                            ' WDT rate 1:1
+                            '
+    INTCON = %10100000      ' Enable global interrupt
+                            ' Disable EE write interrupt
+                            ' Enable TMR0 overflow interrupt
+
+        
+    ' Variable definition
+    ' -------------------
+    '
+    DisplayPort  var PORTB   ' Port for 7 Segments     
+    'ClockInput   var PORTA.4 ' Input pin for signal
+    '_7Seg1       con 8      ' enable more significant 7 segment display
+    '_7Seg2       con 4      ' enable mid significant 7 segment display
+    '_7Seg3       con 2      ' enable less significant 7 segment display
+    Digit_1	     var Byte    ' Hundreds digit
+    Digit_2	     var Byte    ' Tenth digit
+    Digit_3	     var Byte    ' Unit digit
+    Digit_4	     var Byte    ' Unit digit    
+    ToBeDisplay	 var Word    ' Result of count to be send to 7 segment display
+    Display      var Byte    ' Temp variable
+    DisplayLoop  var Byte    ' 
+    Delay        var Word    ' Variable for Delay loop
+    OverFlowVar  var Word	 '
+    Dentes       Var Byte
+    Thousands	 var Bit	 ' Flag for count >= 1000 & < 10 000 
+    'TenThousands var bit	 ' Flag for count >= 10 000
+    RPM           var Word
+
+    ' Variable and software initialisation
+    ' ------------------------------------
+    '
+    pause 500       ' Aguarda o PIC estabilizar
+    tobedisplay = 0 ' set initial value of count
+    TMR0 = 0        ' reset prescaller 
+    On Interrupt GoTo SetVarToBeDisplay
+
+MainLoop:
+
+    ' MainLoop
+    ' ---------
+    '
+    ' 1. display the result of the count on RA4 pin
+    ' 2. refresh display
+    ' 3. reset Timer0 
+    ' 4. reload prescaler.
+    '
+    ' Duration of the procedure : 1 sec 
+    '           fine tuned by DelayBetweenEachDisplay Sub
+    '
+    ' Looping 1 sec and get results of the pulse count in
+    ' TMR0 + OverFlowVar
+    '
+DisplayRefresh:
+	'
+    ' Testing amount of count
+    ' -----------------------
+    '
+    ' Get the result of count and place decimal point flag
+    ' on the according 7 segments
+    'Desnecessario não vou usar ponto
+    'If tobedisplay>=1000 then
+    ' 	tobedisplay=tobedisplay/10
+    '	if tobedisplay>=1000 then
+    '		tobedisplay=tobedisplay/10
+    '		Thousands=0
+    '		TenThousands=1
+    '	else
+    '		TenThousands=0
+    '		thousands=1
+    '	endif
+    'else
+    '	thousands=0
+    '	tenthousands=0
+    'endif
+    '
+    ' convert digit to 7 segment output pattern
+    ' -----------------------------------------
+    
+    'Frequência/(Número de contatos/2))*60 = RPM.
+    'Número de contatos        Hz          RPM
+    '--------------------------------------------
+    '  4                       60          1800
+    '  6                       90          1800
+    '  8                      120          1800
+    '  16                     240          1800
+    '  32                     480          1800
+    Dentes = 4
+    RPM = ((ToBeDisplay/(Dentes/2)) * 60)
+
+    If RPM >=10000 Then
+       RPM = RPM /10
+       Thousands = 1
+    Else
+       Thousands = 0   
+    EndIf    
+    
+    'Frequencia real.
+    'RPM = ToBeDisplay 
+        
+    'RPM = FREQ*60/Número de dentes
+    'RPM = ((ToBeDisplay * 60) / 8) + 15
+     
+    'RPM = (ToBeDisplay*3)      'Multiplicar por 3 para converter em RPM
+    
+    display = RPM Dig 3        ' Read hundreds digit
+    read display,digit_1      ' Convert hundreds
+	'if thousands==1 then digit_1=digit_1 & $7F ' enable decimal dot
+	                                           ' by clearing PORTB.7
+    If thousands == 0 Then digit_1=digit_1 ^/ $7F   'CC Diminui 128
+    
+    display = RPM Dig 2        ' Read hundreds digit
+    read display,digit_2       ' Convert hundreds
+    If RPM>9999 Then
+       digit_2 = digit_2 + 128
+    EndIf   
+	'if thousands==1 then digit_1=digit_1 & $7F ' enable decimal dot
+	                                           ' by clearing PORTB.7
+    If Thousands == 1 Then digit_2=digit_2 ^/ $7F  'CC
+    
+    display = RPM Dig 1        ' Read tenths digit
+    read display,digit_3      ' Convert tenths
+    'if tenthousands==1 then digit_2=digit_2 & $7F ' enable decimal dot 
+                                                  ' by clearing PORTB.7
+                                                  
+    display = RPM Dig 0        ' Read units digit
+    read display,digit_4      ' Convert units
+    '
+    '
+    ' Send digit to 7 segments
+    ' ------------------------
+    For displayloop = 0 To 83 ' loop for about 1 sec
+
+        ' display hundreds
+        ' ----------------
+        If RPM >= 1000 Then ' turn display on only in case upper digits are not equal to 0
+        
+           'PORTA = %0000      ' _7seg1 enable hundreds 7 segment
+           PORTA = %1111
+           displayport=digit_1  ' display    5
+           'PORTA = %0001
+           PORTA = %1110
+           
+        EndIf           
+        GoSub DelayBetweenEachDigit
+        
+        ' display tenth
+        ' -------------
+        If RPM >= 100 Then ' turn display on only in case upper digits are not equal to 0
+        
+           'PORTA = %0000      ' _7seg1 enable hundreds 7 segment
+           PORTA = %1111
+           displayport=digit_2  ' display     3
+           PORTA = %1101
+        EndIf      
+        GoSub DelayBetweenEachDigit
+        
+        If RPM >= 10 Then
+           'PORTA = %0000      ' _7seg1 enable hundreds 7 segment
+           PORTA = %1111       
+           displayport=digit_3 ' display  4
+           PORTA = %1011
+        EndIf
+        GoSub DelayBetweenEachDigit
+        
+        'PORTA = %0000      ' _7seg1 enable hundreds 7 segment
+        PORTA = %1111       
+        displayport=digit_4 ' display  4
+        PORTA = %0111
+        
+        GoSub DelayBetweenEachDigit
+        
+        
+    Next
+    
+    tobedisplay = OverFlowVar + TMR0
+    OverFlowVar = 0 ' Reset OverFlowVar
+    TMR0 = 0        ' reset prescaller
+    GoTo DisplayRefresh
+
+
+DelayBetweenEachDigit:
+
+    ' DelayBetweenEachDigit
+    ' ---------------------
+    ' Produce delay of about 3 mSec 
+    '
+    ' Fine tuned with MPLAB StopWatch to get MainLoop = 1 sec
+    '
+	For delay=1 To 307
+	    @ Nop
+	Next
+	@ Nop
+	@ Nop
+	@ Nop
+	@ Nop
+	@ Nop
+	@ Nop
+	@ Nop
+    Return
+
+
+Disable
+SetVarToBeDisplay:
+    '
+    ' SetVarToBeDisplay
+    ' -----------------
+    ' interrupt routine of TMR0 overflow
+    '
+    ' Reset prescaller
+    ' Reset overflow flag
+    '
+    OverFlowVar = OverFlowVar + 256 
+    INTCON.2 = 0 ' clear overflow flag
+    TMR0 = 0     ' reload TMR0
+Resume
+Enable    
+
+
