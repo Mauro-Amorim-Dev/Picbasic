@@ -8,11 +8,11 @@
 
 
 <h2 id="tecnologias">✅ Tecnologias que utilizo</h2>
-
+img\assets\MicrocodeStudioPlus1.png
 <p>
 <div style="display: inline_block"><br>
  <img align="center" alt="MDA-Arduino" height="30" width="40" src="https://raw.githubusercontent.com/devicons/devicon/master/icons/arduino/arduino-original-wordmark.svg">
-  <img align="center" alt="MDA-Arduino" height="30" width="40" src="img\assets\MicroCodeStudioPlus.png">
+  <img align="center" alt="MDA-Arduino" height="30" width="40" src="img\assets\MicrocodeStudioPlus2.png">
   <img align="center" alt="MDA-Proteus" height="30" width="40" src="img/assets/Proteus_Design_Suite_Atom_Logo.svg"  alt="Proteus Isis">
   <img align="center" alt="MDA-Dot.Net" height="30" width="40" src="img/assets/dot-net-plain-wordmark.svg">
   <img align="center" alt="MDA-Csharp" height="30" width="40" src="img/assets/csharp-original.svg">	
